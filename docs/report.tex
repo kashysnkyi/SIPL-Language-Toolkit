@@ -1,0 +1,310 @@
+\documentclass[12pt,a4paper]{article}
+
+\usepackage{iftex}
+\ifPDFTeX
+  \usepackage[T2A]{fontenc}
+  \usepackage[utf8]{inputenc}
+\else
+  \usepackage{fontspec}
+  \IfFontExistsTF{Times New Roman}
+    {\setmainfont{Times New Roman}}
+    {\setmainfont{DejaVu Serif}}
+  \IfFontExistsTF{Consolas}
+    {\setmonofont{Consolas}}
+    {\setmonofont{DejaVu Sans Mono}}
+\fi
+\usepackage[ukrainian]{babel}
+\usepackage{microtype}
+\usepackage{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{longtable}
+\usepackage{titlesec}
+
+\geometry{left=25mm,right=20mm,top=20mm,bottom=22mm}
+\setlength{\parindent}{1.25cm}
+\setlength{\parskip}{0.25em}
+\setlist{itemsep=0.2em,topsep=0.25em}
+\pagestyle{plain}
+\allowdisplaybreaks
+
+\titleformat{\section}{\large\bfseries}{\thesection.}{0.55em}{}
+\titleformat{\subsection}{\normalsize\bfseries}{\thesubsection.}{0.5em}{}
+
+\newcommand{\code}[1]{\texttt{#1}}
+
+\begin{document}
+
+\begin{titlepage}
+\begin{center}
+  Міністерство освіти і науки України\\
+  Київський національний університет імені Тараса Шевченка\\[5em]
+
+  {\Large\bfseries КУРСОВИЙ ПРОЄКТ}\\[1em]
+  {\large з дисципліни «Теорія програмування»}\\[2em]
+
+  {\LARGE\bfseries SIPL Language Toolkit}\\[0.7em]
+  {\large Парсер, інтерпретатор, візуалізація та семантичні терми}\\[5em]
+\end{center}
+
+\begin{flushright}
+  Виконав:\\
+  студент групи ТТП-32\\
+  Кашинський Владислав
+\end{flushright}
+
+\vfill
+\begin{center}
+  Київ - 2026
+\end{center}
+\end{titlepage}
+
+\tableofcontents
+\newpage
+
+\section{Мета та постановка задачі}
+
+Мета курсового проєкту - створити розширюваний набір інструментів для
+навчальної мови SIPL, у якому граматика, парсер, AST, виконання,
+візуалізація та семантика працюють через стабільні програмні інтерфейси.
+Реалізація не прив'язана до одного варіанта практичної роботи й підтримує
+цілий клас SIPL-програм.
+
+Для виконання обрано модулі, наведені в таблиці~\ref{tab:tasks}.
+
+\begin{table}[h]
+\centering
+\caption{Заявлені модулі проєкту}
+\label{tab:tasks}
+\begin{tabular}{>{\raggedright\arraybackslash}p{18mm}p{100mm}r}
+\toprule
+ID & Зміст & Бали\\
+\midrule
+CORE-01 & Машинозчитувана граматика, позитивні та негативні тести & 0.5\\
+CORE-02 & Парсер і типізоване AST із позиціями у тексті & 1.5\\
+CORE-03 & Інтерпретатор SIPL із лімітом кроків & 2.0\\
+CORE-04 & Подієва модель виконання та trace & 1.0\\
+CORE-05 & CLI та структурований JSON-режим & 1.0\\
+VIS-01 & Parse tree у форматах Text, JSON і DOT & 1.5\\
+VIS-02 & AST та порівняння Parse Tree $\leftrightarrow$ AST & 1.0\\
+SEM-01 & Автоматична побудова семантичного терму & 2.0\\
+\midrule
+ & Заявлена сума & 10.5\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+За правилами курсового проєкту підсумкова оцінка обмежується 10 балами.
+
+\section{Архітектура}
+
+Інструментарій реалізовано мовою Python. Опис мови зберігається у формальній
+граматиці Lark. На її основі парсер будує конкретне синтаксичне дерево, яке
+потім перетворюється у власне типізоване AST. Саме AST передається
+інтерпретатору, модулю семантичних термів і засобам візуалізації.
+
+Для роботи з усіма можливостями передбачено єдиний командний інтерфейс.
+Окремо реалізовано локальну вебсторінку, що використовує ті самі модулі й не
+дублює логіку синтаксичного аналізу або виконання програми.
+
+Потік даних має вигляд
+\[
+\text{Source}
+\longrightarrow \text{Parse Tree}
+\longrightarrow \text{AST}
+\longrightarrow
+\begin{cases}
+\text{Interpreter}\longrightarrow\text{State + Trace},\\
+\text{Semantic Builder}\longrightarrow\text{Semantic Term},\\
+\text{Visualizer}\longrightarrow\text{Text/JSON/DOT}.
+\end{cases}
+\]
+
+Граматика визначена в одному файлі. Інтерпретатор, семантичний модуль та
+візуалізатори не аналізують початковий текст повторно, а використовують
+спільні AST-вузли. Це усуває дублювання логіки й дозволяє надалі під'єднати
+IDE або debugger.
+
+\section{Формальна граматика SIPL}
+
+Програма обмежується ключовими словами \code{begin} та \code{end}.
+Послідовність операторів розділяється крапкою з комою. Підтримано
+присвоювання, блок, умовний оператор, цикл і \code{skip}.
+
+\begin{verbatim}
+program: "begin" stmt_list? "end"
+stmt_list: statement (";" statement)* ";"?
+
+statement: assignment | if_stmt | while_stmt | block | "skip"
+assignment: NAME ":=" expr
+if_stmt: "if" bool_expr "then" statement "else" statement
+while_stmt: "while" bool_expr "do" statement
+\end{verbatim}
+
+Для арифметики реалізовано операції \code{+}, \code{-}, \code{*},
+\code{div}, \code{mod}; для умов - порівняння, \code{not},
+\code{and}, \code{or}. Граматика задає пріоритет і ліву асоціативність
+операторів. Однорядкові та блокові коментарі ігноруються лексером.
+
+Набір тестів містить 11 коректних і 11 некоректних синтаксичних прикладів,
+що перевищує мінімальний критерій CORE-01.
+
+\section{Типізоване AST та SourceSpan}
+
+Парсер Lark спочатку будує конкретне дерево, після чого модуль
+\code{parser.py} створює власні незмінні AST-вузли. Класи \code{Number} і
+\code{Variable} представляють числа та змінні. Операціям відповідають
+\code{UnaryExpr}, \code{BinaryExpr}, \code{Comparison} і \code{BoolBinary}.
+Оператори подано класами \code{Assignment}, \code{Skip}, \code{If},
+\code{While} та \code{Block}. Усе дерево об'єднує вузол \code{Program}.
+
+Кожен вузол має \code{SourceSpan}: початковий і кінцевий рядок, колонку та
+зміщення у вихідному тексті. Завдяки цьому помилки й події можна точно
+пов'язати з фрагментом програми. AST серіалізується у стабільний JSON,
+незалежний від внутрішнього формату бібліотеки Lark.
+
+\section{Інтерпретатор і подієва модель}
+
+Стан SIPL-програми подано відображенням
+\[
+  State = Var\to Int,
+\]
+реалізованим словником Python. Присвоювання оновлює компоненту стану,
+послідовність виконує оператори зліва направо, \code{if} обирає одну гілку,
+а \code{while} повторює тіло, доки умова істинна.
+
+Читання неініціалізованої змінної й ділення на нуль породжують зрозумілу
+runtime-помилку з позицією у програмі. Ліміт кроків перериває потенційно
+нескінченний цикл.
+
+Перед виконанням оператора створюється \code{BeforeStatement}. Після нього
+додається \code{AfterStatement}. Зміну значення фіксує
+\code{VariableChanged}, а перевірку умови в \code{if} або \code{while}
+позначає \code{ConditionEvaluated}. Виконання завершує подія
+\code{ProgramFinished}, що містить кінцевий стан.
+
+Кожна подія має \code{SourceSpan}. Trace доступний як об'єкт Python,
+текст CLI та JSON, тому його можна повторно використати у debugger або
+візуалізаторі.
+
+\section{Семантичні терми}
+
+Семантичний терм будується рекурсивно з AST. Наприклад, для програми
+перевірки парності отримано:
+
+\begin{multline*}
+WH(S^2(gr,N^{\Rightarrow},1),
+AS^N(S^2(sub,N^{\Rightarrow},2)))\;\cdot\\
+IF(S^2(eq,N^{\Rightarrow},1),AS^R(1),AS^R(0)).
+\end{multline*}
+
+Тут $S^2$ - двомісна суперпозиція, $N^{\Rightarrow}$ - розіменування,
+$AS^N$ - присвоювання, $WH$ - цикл, $IF$ - розгалуження, а $\cdot$ -
+послідовна композиція. Отже, позначення відповідають матеріалам курсу й
+попереднім практичним роботам.
+
+\section{Візуалізація}
+
+Parse tree та AST можна вивести як звичайне текстове дерево з відступами й
+позиціями вузлів. Для програмного опрацювання передбачено JSON, а для
+графічного подання - формат Graphviz DOT, з якого будуються SVG або PNG.
+
+Окрема команда порівнює кількість вузлів. Parse tree зберігає правила
+граматики й токени, тоді як AST вилучає пунктуацію та проміжні синтаксичні
+категорії, залишаючи лише семантично значущі конструкції.
+
+\section{Командний інтерфейс}
+
+Реалізовано команди:
+
+\begin{longtable}{p{28mm}p{105mm}}
+\toprule
+Команда & Призначення\\
+\midrule
+\endhead
+\code{check} & перевірка синтаксичної коректності\\
+\code{parse} & побудова типізованого AST\\
+\code{run} & виконання та виведення кінцевого стану\\
+\code{trace} & покроковий журнал виконання\\
+\code{semantic} & побудова семантичного терму\\
+\code{tree} & візуалізація parse tree\\
+\code{ast} & візуалізація AST\\
+\code{compare} & порівняння конкретного й абстрактного синтаксису\\
+\bottomrule
+\end{longtable}
+
+JSON-відповіді мають поле \code{schema\_version = "1.0"}. Код завершення
+0 означає успіх, 2 - синтаксичну або I/O-помилку, 3 - runtime-помилку.
+
+Локальний вебінтерфейс запускається командою \code{sipl-web}.
+\par\noindent Адреса сайту:
+\code{127.0.0.1:8000}. Він дає змогу ввести програму й стан, виконати
+аналіз, переглянути AST, семантичний терм і trace. Зовнішні сервіси не потрібні.
+
+\section{Тестування та демонстрація}
+
+Повний автоматичний набір містить 44 тести. Результат:
+
+\begin{verbatim}
+44 passed
+TOTAL: 670 statements, 97 missed, coverage 84%
+\end{verbatim}
+
+Покриття перевищує вимогу 80\% для ядра. Перевірено синтаксис,
+пріоритети операцій, SourceSpan, виконання, коротке замикання умов,
+помилки, ліміт кроків, trace, CLI, JSON, DOT і семантичні терми.
+
+Для демонстрації підготовлено три програми. Піднесення до степеня при
+$X=2$ і $Y=5$ дає $R=32$. Алгоритм Евкліда для $M=48$ і $N=18$
+завершується зі значеннями $M=N=6$. У програмі перевірки парності початкове
+$N=5$ переходить у $N=1$, після чого результатом стає $R=1$.
+
+Приклади команд:
+
+\begin{verbatim}
+sipl run examples/power.sipl --state X=2 --state Y=5
+sipl run examples/gcd.sipl --state M=48 --state N=18
+sipl trace examples/parity.sipl --state N=5 --json
+sipl semantic examples/parity.sipl
+pytest --cov=sipl --cov-report=term-missing
+\end{verbatim}
+
+\section{Відтворюваність та обмеження}
+
+Залежності й метадані зафіксовано в \code{pyproject.toml}. Проєкт можна
+встановити командою \code{pip install -e ".[dev]"}, після чого доступна
+команда \code{sipl}. README містить команди запуску, тестування та опис
+кодів завершення.
+
+Поточна версія не реалізує статичну типізацію, IDE, debugger і символічне
+доведення коректності. DOT генерується без вбудованого Graphviz-рендерера.
+Ці обмеження явно задокументовано й вони не впливають на заявлені модулі.
+
+\enlargethispage{1\baselineskip}
+\section{Висновок}
+
+Створено працездатний SIPL Language Toolkit: граматика є єдиним джерелом
+синтаксису, парсер будує типізоване AST з позиціями, інтерпретатор повертає
+стан і trace, а візуалізація та семантика використовують AST API.
+
+Реалізацію перевірено 44 тестами з покриттям 84\%. Підготовлено приклади
+для захисту й відтворюване встановлення. Виконано завдання на максимальні
+10 балів за умовами проєкту.
+
+\vspace{0.2em}
+\noindent\textbf{Використані матеріали}
+\addcontentsline{toc}{section}{Використані матеріали}
+
+\begingroup
+\footnotesize
+\noindent
+1. М.~С.~Нікітченко. \emph{Теорія програмування}. 2020.\quad
+2. О.~Шишацька, А.~Криволап, А.~Шишацький. \emph{Теорія програмування. Практикум}. 2024.\quad
+3. Технічне завдання \emph{SIPL Language Toolkit}, 2026.\quad
+4. Документація бібліотеки Lark Parser.
+\endgroup
+
+\end{document}
+

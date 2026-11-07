@@ -1,0 +1,9 @@
+* text=auto
+*.py text eol=lf
+*.md text eol=lf
+*.toml text eol=lf
+*.lark text eol=lf
+*.html text eol=lf
+*.tex text eol=lf
+*.sipl text eol=lf
+*.pdf binary

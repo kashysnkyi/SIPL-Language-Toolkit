@@ -1,0 +1,48 @@
+start: program
+
+program: "begin" stmt_list? "end"
+stmt_list: statement (";" statement)* ";"?
+
+?statement: assignment
+          | if_stmt
+          | while_stmt
+          | block
+          | "skip"                         -> skip_stmt
+
+block: "begin" stmt_list? "end"
+assignment: NAME ":=" expr
+if_stmt: "if" bool_expr "then" statement "else" statement
+while_stmt: "while" bool_expr "do" statement
+
+?bool_expr: bool_expr "or" bool_term       -> bool_or
+          | bool_term
+?bool_term: bool_term "and" bool_not       -> bool_and
+          | bool_not
+?bool_not: "not" bool_not                  -> bool_not
+         | comparison
+?comparison: expr COMP expr                 -> comparison
+           | "true"                        -> true_literal
+           | "false"                       -> false_literal
+           | "(" bool_expr ")"
+
+?expr: expr "+" term                       -> add
+     | expr "-" term                       -> sub
+     | term
+?term: term "*" factor                     -> mul
+     | term "div" factor                   -> div
+     | term "mod" factor                   -> mod
+     | factor
+?factor: "-" factor                        -> neg
+       | NUMBER                            -> number
+       | NAME                              -> variable
+       | "(" expr ")"
+
+COMP: "!=" | "<=" | ">=" | "=" | "<" | ">"
+NAME: /[A-Za-z_][A-Za-z0-9_]*/
+NUMBER: /0|[1-9][0-9]*/
+
+%import common.WS
+%ignore WS
+%ignore /\/\/[^\n]*/
+%ignore /(?s:\/\*.*?\*\/)/
+

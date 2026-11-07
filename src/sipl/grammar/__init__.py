@@ -1,0 +1,2 @@
+"""Packaged SIPL grammar resources."""
+
